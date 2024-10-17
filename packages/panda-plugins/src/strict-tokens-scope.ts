@@ -9,12 +9,38 @@ import type { PandaContext } from '@pandacss/node'
 
 export interface StrictTokensScopeOptions {
   categories?: TokenCategory[]
+  excludeCategories?: TokenCategory[]
   props?: Array<keyof CssProperties | (string & {})>
 }
+
+const allCategories = [
+  'zIndex',
+  'opacity',
+  'colors','fonts',
+  'fontSizes',
+  'fontWeights',
+  'lineHeights',
+  'letterSpacings',
+  'sizes',
+  'shadows',
+  'spacing',
+  'radii',
+  'borders',
+  'durations',
+  'easings',
+  'animations',
+  'blurs',
+  'gradients',
+  'assets',
+  'borderWidths',
+  'aspectRatios',
+  'containerNames',
+] as const satisfies TokenCategory[]
 
 /**
  * Enforce `strictTokens` only for a set of `TokenCategory` or style props
  * - `categories`: Every properties bound to those token categories will be restricted with `strictTokens`
+ * - `excludeCategories`: Every properties bound to those token categories will be excluded from `strictTokens`
  * - `props`: Explicit list of props that will be restricted with `strictTokens`
  *
  * @see https://panda-css.com/docs/concepts/writing-styles#type-safety
@@ -44,8 +70,9 @@ export const transformPropTypes = (
   ctx: PandaContext,
   logger?: LoggerInterface,
 ) => {
-  const { categories = [], props = [] } = options
-  if (!categories.length && !props.length) return args.artifacts
+  const { categories = [], excludeCategories = [], props = [] } = options
+  if (!categories.length && !excludeCategories.length && !props.length) return args.artifacts
+  const targetCategories = (categories.length ? categories : allCategories).filter((x) => !excludeCategories.includes(x))
 
   const artifact = args.artifacts.find((x) => x.id === 'types-styles')
   const content = artifact?.files.find((x) => x.file.includes('style-props'))
@@ -63,7 +90,7 @@ export const transformPropTypes = (
     if (!categoryType) return
 
     const tokenCategory = categoryType.replace('Tokens["', '').replace('"]', '') as TokenCategory
-    if (!categories.includes(tokenCategory)) {
+    if (!targetCategories.includes(tokenCategory)) {
       return
     }
 
@@ -80,7 +107,7 @@ export const transformPropTypes = (
   if (!strictTokenProps.length) return args.artifacts
 
   if (logger) {
-    logger.debug('plugin:restrict-strict-tokens', `🐼  Strict token props: ${strictTokenProps.join(', ')}`)
+    logger.debug('plugin:restrict-strict-tokens', `🐼  Exclude token props: ${strictTokenProps.join(', ')}`)
   }
 
   // const regex = new RegExp(`(${strictTokenProps.join('|')})\?: ConditionalValue<WithEscapeHatch<(.+)>>`, 'g')
@@ -94,7 +121,6 @@ export const transformPropTypes = (
       const longhand = ctx.utility.shorthands.get(prop)
       // console.log({ prop, longhand, isStrict: strictTokenProps.includes(prop) })
       if (value.includes('CssProperties')) return match
-
       return `${prop}?: ConditionalValue<${value} | CssProperties["${longhand || prop}"]>`
     }) +
     [
